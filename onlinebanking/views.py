@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from .models import BankAccount, AccountTransaction, Customer, Retailer, BankingProducts, DemoScenarios
 from .forms import AccountTransactionForm, AccountTransferForm
 from elasticsearch import Elasticsearch
-from langchain.chat_models import AzureChatOpenAI, BedrockChat
+from langchain_community.chat_models import AzureChatOpenAI, BedrockChat
 from dotenv import load_dotenv
 import os
 from datetime import datetime, timezone, timedelta

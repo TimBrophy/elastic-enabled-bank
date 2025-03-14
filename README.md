@@ -34,8 +34,12 @@ https://eland.readthedocs.io/en/latest/
 ## Run as-is using Docker:
 - Navigate to the root folder of the downloaded repo.
 - using the file env.example as a template, construct your .env file with all of the necessary credentials required to run the demo.
+- Option 1 : Use the prebuild docker container:
+````
+sudo docker run --env-file .env -d --name elastic-bank -p 8000:8000 ghcr.io/TimBrophy/elastic-enabled-bank
+````
 
-- Build the container image:
+- Option 2 : Build the container image:
 ````
 sudo docker build -t <your_chosen_image_name> .
 ````

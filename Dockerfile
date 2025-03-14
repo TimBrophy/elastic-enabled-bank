@@ -1,5 +1,5 @@
 # Builder stage
-FROM python:3.10.10 as builder
+FROM python:3.10.10 AS builder
 
 # Set environment variables
 ENV LANG=C.UTF-8
@@ -42,4 +42,4 @@ VOLUME /data
 
 # Set the entry point and command to run the application using Gunicorn
 ENTRYPOINT ["python"]
-CMD ["-m", "gunicorn", "-b", "0.0.0.0:8000", "--worker-class=gevent", "--worker-connections=50", "--workers=3", "config.wsgi:application"]
+CMD ["-m", "gunicorn", "-b", "0.0.0.0:8000", "--worker-class=gevent", "--worker-connections=50", "--workers=3", "--graceful-timeout=900", "--timeout=900", "config.wsgi:application"]

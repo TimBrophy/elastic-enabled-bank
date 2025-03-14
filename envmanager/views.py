@@ -13,7 +13,7 @@ from langchain_text_splitters import CharacterTextSplitter, TokenTextSplitter
 import uuid
 import os
 import boto3
-from langchain.chat_models import AzureChatOpenAI, BedrockChat
+from langchain_community.chat_models import AzureChatOpenAI, BedrockChat
 
 customer_id = getattr(settings, 'DEMO_USER_ID', None)
 index_name = getattr(settings, 'TRANSACTION_INDEX_NAME', None)

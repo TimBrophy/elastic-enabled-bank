@@ -20,7 +20,8 @@ elastic_password = getattr(settings, 'elastic_password', None)
 
 es = Elasticsearch(
     cloud_id=elastic_cloud_id,
-    http_auth=(elastic_user, elastic_password)
+    http_auth=(elastic_user, elastic_password),
+    request_timeout=None
 )
 
 

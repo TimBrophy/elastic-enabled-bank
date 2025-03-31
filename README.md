@@ -13,40 +13,64 @@ Irrespective of how you deploy the python app, you will need an Elasticsearch cl
 ### Elasticsearch config:
 
 Your cluster will need:
+
 - 8GB RAM hot nodes
 - 4GB RAM ml nodes
 - 1GB RAM kibana node
 - 2GB RAM search node
 - an Integration node if you want to instrument the application later
 
-Once you have a cluster configured, you must enable the '.elser_model_2_linux-x86_64' trained model in your cluster. If you choose another model you must consider
-the implications of updating the query code as the format of the semantic search is done using text expansion.
+Once you have a cluster configured, you can deploy '.elser_model_2_linux-x86_64' trained model in your cluster directly from the interface. If you choose another model you must consider the implications of updating the query code as the format of the semantic search is done using text expansion.
 
-In order for sentiment analysis to work on the LLM logging capability, you will need a sentiment model. I used 'nlptown__bert-base-multilingual-uncased-sentiment'
-as this provides a score based on stars (5 being the most positive and 1 being the least) and also gives a confidence prediction out of 1.
+In order for sentiment analysis to work on the LLM logging capability, you will need a sentiment model. You can use the interface to deploy 'nlptown__bert-base-multilingual-uncased-sentiment' as this provides a score based on stars (5 being the most positive and 1 being the least) and also gives a confidence prediction out of 1.
 
-You will need to upload this into your cluster following the ELAND library steps available here:
+You will need to to install eland[pytorch] using pip:
 
-````
-https://eland.readthedocs.io/en/latest/
+````bash
+python -m pip install 'eland[pytorch]'
 ````
 
 ## Run as-is using Docker:
+
 - Navigate to the root folder of the downloaded repo.
 - using the file env.example as a template, construct your .env file with all of the necessary credentials required to run the demo.
 - Option 1 : Use the prebuild docker container:
+
+Docker version will come in two flavors :
+
+- elasticbank: version that will cover most of the elasticbank demo aside the sentiment analysis
+- elasticbank-complete: heavier version that contains all the _elastic-enabled-bank_ docker features with eland for sentiment analysis NLP model import
+
+_elasticbank_
+
+````bash
+sudo docker run --env-file .env -d --rm --name elastic-bank -p 8000:8000 ghcr.io/TimBrophy/elasticbank
 ````
-sudo docker run --env-file .env -d --name elastic-bank -p 8000:8000 ghcr.io/TimBrophy/elastic-enabled-bank
+
+_elasticbank-complete_
+
+````bash
+sudo docker run --env-file .env -d --rm --name elastic-bank-complete -p 8000:8000 ghcr.io/TimBrophy/elasticbank-complete
 ````
 
 - Option 2 : Build the container image:
-````
+
+````bash
 sudo docker build -t <your_chosen_image_name> .
 ````
 
 Next, run the container to bind on port 8000:
+
+_elasticbank_
+
+````bash
+sudo docker run --env-file .env -d --rm --name elasticbank -p 8000:8000 <your_chosen_image_name>
 ````
-sudo docker run --env-file .env -d --name elastic-bank -p 8000:8000 <your_chosen_image_name>
+
+_elasticbank-complete_
+
+````bash
+sudo docker run --env-file .env -d --rm --name elasticbank -p 8000:8000 <your_chosen_image_name>
 ````
 
 Your host should now serve the demo on port 8000.
@@ -99,20 +123,30 @@ pip install -r requirements.txt
 Create a fresh .env file, and use the contents of env.example as a template. You will need all of these values in order for the
 application to work. Adjust all the variables to your setup.
 
+Source the file in your terminal before starting the following commands.
+
+```bash
+source .env
+```
+
 IMPORTANT: Generate a DJANGO_SECRET_KEY and put it to the .env file as well:
+
 ```bash
 python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
 ```
 
 Make sure all migrations are applied
+
 ````bash
 python manage.py migrate
 ````
 
 In your terminal, enter the following command to start the webserver:
+
 ````bash
 python manage.py runserver
 ````
+
 Access the front-end of the online banking app by entering "127.0.0.1:8000" in your browser.
 
 And hey, look at that, we're running an ***Elastic-enabled bank!***

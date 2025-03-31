@@ -38,10 +38,6 @@ index_name = getattr(settings, 'TRANSACTION_INDEX_NAME', None)
 elastic_cloud_id = getattr(settings, 'elastic_cloud_id', None)
 elastic_user = getattr(settings, 'elastic_user', None)
 elastic_password = getattr(settings, 'elastic_password', None)
-# openai_api_key = os.environ['openai_api_key']
-# openai_api_type = os.environ['openai_api_type']
-# openai_api_base = os.environ['openai_api_base']
-# openai_api_version = os.environ['openai_api_version']
 model_id = getattr(settings, 'MODEL_ID', None)
 pipeline_name = getattr(settings, 'TRANSACTION_PIPELINE_NAME', None)
 product_index_name = getattr(settings, 'PRODUCT_INDEX', None)
@@ -72,12 +68,15 @@ def calculate_cost(message, type):
     message_cost = rounded_up_message_tokens * cost_per_1k
     return message_cost
 
-
-def log_llm_interaction(prompt, response, sent_time, received_time, answer_type, provider, model, business_process):
-    es = Elasticsearch(
+def get_es_client():
+    """Initialize and return an Elasticsearch client."""
+    return Elasticsearch(
         cloud_id=elastic_cloud_id,
         http_auth=(elastic_user, elastic_password)
     )
+
+def log_llm_interaction(prompt, response, sent_time, received_time, answer_type, provider, model, business_process):
+    es = get_es_client()
     log_id = uuid.uuid4()
     dt_latency = received_time - sent_time
     actual_latency = dt_latency.total_seconds()
@@ -212,10 +211,7 @@ def customer_support(request):
     documents = ""
     if request.method == 'POST':
         question = request.POST.get('question')
-        es = Elasticsearch(
-            cloud_id=elastic_cloud_id,
-            http_auth=(elastic_user, elastic_password)
-        )
+        es = get_es_client()
         query = {
             "bool": {
                 "should": [
@@ -292,10 +288,7 @@ def customer_support(request):
 def financial_analysis(request):
     demo_user = Customer.objects.filter(id=customer_id).first()
     # search elastic for user transactions and aggregate them by category
-    es = Elasticsearch(
-        cloud_id=elastic_cloud_id,
-        http_auth=(elastic_user, elastic_password)
-    )
+    es = get_es_client()
     # Generate category spend
     query = {
         "size": 0,
@@ -572,11 +565,7 @@ def search(request):
         print(search_term)
         demo_user = Customer.objects.filter(id=customer_id).first()
         # handle the es connection for the map and conversational search components
-        es = Elasticsearch(
-            cloud_id=elastic_cloud_id,
-            http_auth=(elastic_user, elastic_password)
-        )
-
+        es = get_es_client()
         query = {
             "bool": {
                 "should": [
@@ -691,11 +680,7 @@ def transactions(request, bank_account_id):
 def landing(request):
     demo_user = Customer.objects.filter(id=customer_id).first()
     # handle the es connection for the map and conversational search components
-    es = Elasticsearch(
-        cloud_id=elastic_cloud_id,
-        http_auth=(elastic_user, elastic_password)
-    )
-
+    es = get_es_client()
     # handle any form posting
     if request.method == 'POST':
         payment_form = AccountTransactionForm(request.POST)

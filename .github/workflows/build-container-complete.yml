@@ -5,7 +5,7 @@ on:
     branches:
       - main  # Trigger only on main branch
     paths:
-      - Dockerfile  # Trigger only on changes to the Dockerfile
+      - Dockerfile-complete  # Trigger only on changes to the Dockerfile
   workflow_dispatch: # Allow manual triggering
 
 jobs:
@@ -31,12 +31,12 @@ jobs:
 
       - name: Build and Tag Docker Image
         run: |
-          IMAGE_PATH=ghcr.io/${OWNER_LC}/elasticbank
-          docker build -t $IMAGE_PATH:latest -f Dockerfile .
+          IMAGE_PATH=ghcr.io/${OWNER_LC}/elasticbank-complete
+          docker build -t $IMAGE_PATH:latest -f Dockerfile-complete .
           echo "Built image: $IMAGE_PATH:latest"
 
       - name: Push Docker Image
         run: |
-          IMAGE_PATH=ghcr.io/${OWNER_LC}/elasticbank
+          IMAGE_PATH=ghcr.io/${OWNER_LC}/elasticbank-complete
           docker push $IMAGE_PATH:latest
           echo "Pushed image: $IMAGE_PATH:latest"

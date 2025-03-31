@@ -1,9 +1,9 @@
 # Builder stage
-FROM python:3.11-slim AS builder
+FROM python:3.11 AS builder
 
 # Set environment variables
-ENV LANG=C.UTF-8 \
-    PYTHONUNBUFFERED=1
+ENV LANG=C.UTF-8
+ENV PYTHONUNBUFFERED=1
 
 # Set up the working directory
 WORKDIR /eeb
@@ -35,6 +35,9 @@ COPY --from=builder /venv /venv
 # Set environment variables for the final stage
 ENV PYTHONUNBUFFERED=1 \
     PATH="/venv/bin:$PATH"
+
+# Install Eland
+RUN python -m pip install 'eland[pytorch]'
 
 # Expose port 8000 to the outside world
 EXPOSE 8000

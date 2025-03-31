@@ -1,11 +1,12 @@
 import json
-
+import time
 from django.http import StreamingHttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from onlinebanking.models import BankAccount, BankAccountType, AccountTransactionType, AccountTransaction, Customer, \
     CustomerAddress, Retailer, DemoScenarios, BankingProducts
 from django.core.management import call_command
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, ConnectionError, AuthenticationException, exceptions
+from elasticsearch.exceptions import ApiError
 from elasticsearch.helpers import scan
 import subprocess
 from config import settings
@@ -15,6 +16,8 @@ import os
 import boto3
 from langchain_community.chat_models import BedrockChat
 from langchain_openai import AzureChatOpenAI
+import eland as ed
+from eland.ml import MLModel
 
 customer_id = getattr(settings, 'DEMO_USER_ID', None)
 index_name = getattr(settings, 'TRANSACTION_INDEX_NAME', None)
@@ -27,12 +30,38 @@ elastic_cloud_id = getattr(settings, 'elastic_cloud_id', None)
 elastic_user = getattr(settings, 'elastic_user', None)
 elastic_password = getattr(settings, 'elastic_password', None)
 kibana_url = getattr(settings, 'kibana_url', None)
+model_id = os.environ["TRANSFORMER_MODEL"]
 
 customer_support_base_index = getattr(settings, 'CUSTOMER_SUPPORT_INDEX', None)
 customer_support_index = f'{customer_support_base_index}_processed'
 llm_provider = getattr(settings, 'LLM_PROVIDER', None)
 llm_temperature = 0
 
+
+def get_es_client():
+    try:
+        client = Elasticsearch(
+            cloud_id=elastic_cloud_id,
+            http_auth=(elastic_user, elastic_password)
+        )
+        
+        # Check if the client is connected
+        if client.ping():
+            print("Successfully connected to Elasticsearch.")
+        else:
+            print("Warning: Elasticsearch client is initialized but not responding.")
+        
+        return client
+    
+    except AuthenticationException:
+        print("Error: Authentication failed. Please check your credentials.")
+        return None
+    except ConnectionError:
+        print("Error: Unable to connect to Elasticsearch. Check network settings.")
+        return None
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return None
 
 def init_chat_model(provider):
     if provider == 'azure':
@@ -53,14 +82,11 @@ def init_chat_model(provider):
             streaming=True,
             model_kwargs={"temperature": llm_temperature})
     return chat_model
-
-
+    
 # Create your views here.
 def manager(request):
-    es = Elasticsearch(
-        cloud_id=elastic_cloud_id,
-        http_auth=(elastic_user, elastic_password)
-    )
+    es = get_es_client()
+
     index_exists = False
     product_index_exists = False
     llm_index_exists = False
@@ -242,10 +268,8 @@ def banking_products(request, action=None, banking_product_id=None):
 def cluster(request):
     print(f"elastic cloud id: {elastic_cloud_id}")
 
-    es = Elasticsearch(
-        cloud_id=elastic_cloud_id,
-        http_auth=(elastic_user, elastic_password)
-    )
+    es = get_es_client()
+
     context = {
         'es': es.info,
         'ping': es.ping
@@ -295,9 +319,8 @@ def process_data_action(request):
 
 
 def clear_data(request):
-    es = Elasticsearch(
-        cloud_id=elastic_cloud_id,
-        http_auth=(elastic_user, elastic_password))
+    es = get_es_client()
+
     query = {
         "match_all": {}
     }
@@ -370,18 +393,142 @@ def export_data(request):
     }
     return render(request, 'envmanager/export.html', context)
 
+def deploy_elser(model_id, request):
+    """Deploys an ELSER model and returns logs to the frontend."""
+    
+    es = get_es_client()
+    deployment_status = ""
+    try:            
+        # Check if the model is already downloaded
+        try:
+            status = es.ml.get_trained_models(model_id=model_id, include="definition_status")
+            print(f"DEBUG: Model status response: {status}")
+            model_exists = status.get("trained_model_configs", [{}])[0].get("fully_defined", False)
+
+        except ApiError as e:
+            # Check if it's a 404 error (model not found)
+            if e.status_code == 404:
+                print(f"DEBUG: Model {model_id} not found. Proceeding with model creation.")
+                model_exists = False  # Indicate that model does not exist
+            else:
+                print(f"ERROR: Elasticsearch API Error while fetching model status: {str(e)}")
+                deployment_status += f"Elasticsearch API Error while checking existing model status: {str(e)}<br>"
+                raise  # Stop execution for other API errors
+
+        if model_exists:
+            deployment_status += f"{model_id} model is already downloaded and ready to be deployed.<br>"
+        else:
+            try:
+                # Create new model if not found
+                es.ml.put_trained_model(
+                    model_id=model_id,
+                    input={"field_names": ["concatenated_text"]}
+                )
+                deployment_status += f"{model_id} model creation initiated. Downloading...<br>"
+            except ApiError as e:
+                deployment_status += f"Elasticsearch API Error while creating model: {str(e)}<br>"
+            except Exception as e:
+                deployment_status += f"Unexpected error while creating model: {str(e)}<br>"
+            try:
+                # Check model download status
+                while True:
+                    status = es.ml.get_trained_models(model_id=model_id, include="definition_status")
+                    if status.get("trained_model_configs", [{}])[0].get("fully_defined", False):
+                        deployment_status += f"{model_id} model is downloaded and ready to be deployed.<br>"
+                        break
+                    else:
+                        deployment_status += f"{model_id} model is downloading and not ready yet.<br>"
+                    time.sleep(5)
+            except ApiError as e:
+                deployment_status += f"Elasticsearch API Error while checking model status: {str(e)}<br>"
+            except Exception as e:
+                deployment_status += f"Unexpected error while checking model status: {str(e)}<br>"
+        try:
+            # Start the model deployment if not already started
+            if get_model_routing_state(model_id) == "started":
+                print(deployment_status)
+                deployment_status += f"{model_id} model has been already deployed and is currently started.<br>"
+            else:
+                deployment_status += f"{model_id} model will be started.<br>"
+                es.ml.start_trained_model_deployment(
+                    model_id=model_id,
+                    number_of_allocations=1,
+                    threads_per_allocation=1,
+                    priority="low",
+                    wait_for="started"
+                )
+
+                while True:
+                    if get_model_routing_state(model_id) == "started":
+                        deployment_status += f"{model_id} model has been successfully started.<br>"
+                        break
+                    else:
+                        deployment_status += f"{model_id} model is currently being started.<br>"
+                    time.sleep(5)
+        except ApiError as e:
+            deployment_status += f"Elasticsearch API Error while checking model status: {str(e)}<br>"
+        except Exception as e:
+            deployment_status += f"Unexpected error while checking model status: {str(e)}<br>"
+    except ApiError as e:
+        deployment_status += f"Elasticsearch API Error while starting model: {str(e)}<br>"
+    except Exception as e:
+        deployment_status += f"Unexpected error while starting model: {str(e)}<br>"
+
+
+    return render(request, "envmanager/knowledge_base.html", {"message": deployment_status})
+
+def get_model_routing_state(model_id):
+    """Fetches the model routing state from Elasticsearch."""
+
+    es = get_es_client()
+
+    try:
+        status = es.ml.get_trained_models_stats(model_id=model_id)
+        print(f"Model stats response: {status}")  # Debugging: Print the full response
+
+        if "trained_model_stats" in status and len(status["trained_model_stats"]) > 0:
+            model_stats = status["trained_model_stats"][0]
+
+            # Check if deployment_stats exists
+            if "deployment_stats" in model_stats and "nodes" in model_stats["deployment_stats"]:
+                if len(model_stats["deployment_stats"]["nodes"]) > 0:
+                    routing_state = model_stats["deployment_stats"]["nodes"][0]["routing_state"]["routing_state"]
+                    print(f"Model {model_id} routing state: {routing_state}")
+                    return routing_state
+                else:
+                    print(f"Model {model_id} has no nodes deployed.")
+                    return "not_deployed"
+
+            else:
+                print(f"Model {model_id} is not deployed yet (no deployment_stats).")
+                return "not_deployed"
+
+        else:
+            print(f"Model {model_id} not found in trained_model_stats.")
+            return "not_found"
+
+    except ApiError as e:
+        deployment_status += f"Elasticsearch API Error while fetching model routing state: {str(e)}"
+        print(f"Elasticsearch API Error while fetching model routing state: {str(e)}")
+        return "error"
+
+    except Exception as e:
+        deployment_status += f"Unexpected error while fetching model routing state: {str(e)}"
+        print(f"Unexpected error while fetching model routing state: {str(e)}")
+        return "error"
 
 def knowledge_base(request):
-    es = Elasticsearch(
-        cloud_id=elastic_cloud_id,
-        http_auth=(elastic_user, elastic_password)
-    )
     processed_kb_index = customer_support_index
     if request.POST.get('command_name') == 'execute':
+
         kb_pipeline_processors = read_json_file(f'files/knowledge_base_pipeline.json')
         kb_index_mapping = read_json_file(f'files/knowledge_base_mapping.json')
         kb_index_settings = read_json_file(f'files/knowledge_base_settings.json')
+        # Make sure ELSER is deployed
+        deploy_elser(model_id, request)
+
         # destroy any existing assets
+        es = get_es_client()
         index_exists = es.indices.exists(index=processed_kb_index)
         if index_exists:
             print("delete index")
@@ -430,11 +577,50 @@ def knowledge_base(request):
     }
     return render(request, 'envmanager/knowledge_base.html', context)
 
+def eland_action(request):
+    """Handle form submission to deploy the Hugging Face model using Eland's CLI script."""
+    if request.method == "POST" and request.POST.get("command_name") == "eland_execute":
+        es = get_es_client()
+        model_id = "nlptown/bert-base-multilingual-uncased-sentiment"
+        es_model_id = model_id.replace("/", "__")  # Convert model ID for Elasticsearch compatibility
+
+        try:
+            # Fetch existing models
+            existing_models = es.ml.get_trained_models()
+            model_names = [model["model_id"] for model in existing_models.get("trained_model_configs", [])]
+            if es_model_id in model_names:
+                print("Model is already deployed. Skipping import.")
+                deployment_status = f"Model {model_id} is already deployed in Elasticsearch."
+            else:
+                print("Model not found. Proceeding with import...")
+                command = [
+                    "eland_import_hub_model",
+                    "--cloud-id", elastic_cloud_id,
+                    "-u", elastic_user,
+                    "-p", elastic_password,
+                    "--hub-model-id", model_id,
+                    "--task-type", "text_classification",
+                    "--es-model-id", es_model_id,
+                    "--start"
+                ]
+                print(f"Executing command: {' '.join(command)}")  # Debugging
+
+                result = subprocess.run(
+                    command, capture_output=True, text=True, check=True, stdin=subprocess.DEVNULL
+                )
+                print("Model import completed.")
+                deployment_status = f"Model imported successfully! Output:\n{result.stdout}"
+        except subprocess.CalledProcessError as e:
+            print(f"Model import failed: {e.stderr}")
+            deployment_status = f"Model import failed! Error:\n{e.stderr}"
+        except Exception as e:
+            print(f"Error checking model status: {e}")
+            deployment_status = f"Error checking model status: {str(e)}"
+
+        return render(request, "envmanager/knowledge_base.html", {"message": deployment_status})
 
 def index_setup(request):
-    es = Elasticsearch(
-        cloud_id=elastic_cloud_id,
-        http_auth=(elastic_user, elastic_password))
+    es = get_es_client()
     if request.method == 'POST':
         transaction_index_mapping = read_json_file(f'files/transaction_index_mapping.json')
         transaction_index_settings = read_json_file(f'files/transaction_index_settings.json')

@@ -4,15 +4,48 @@
  <div class="container">
      <h5>Based on the .env file configuration, your knowledge base is captured as: {{ knowledge_base }}</h5>
      <p>
-         In order to use this index for RAG it needs to be reprocessed into smaller chunks of content and passed through an inference pipeline.<br>
+         In order to use this index for RAG, it needs to be reprocessed into smaller chunks of content and passed through an inference pipeline.<br>
          If you have executed this operation before, clicking the button below will delete and start afresh, generating a new instance of {{ processed_kb_index }}.<br>
          Your existing web crawler index will be processed into this new index with smaller content batches.
-
-        <form method="post" action="{% url 'knowledge_base' %}">
-            {% csrf_token %}
-            <input type="text" name="command_name" value="execute" hidden>
-            <button type="submit" class="btn btn-primary">Execute pipeline config and knowlege_base setup</button>
-        </form>
      </p>
+
+     <!-- Form for Deploying Elser, Pipeline Config, and KB -->
+     <form method="post" action="{% url 'knowledge_base' %}" onsubmit="startLoading('elserButton', 'loadingTextEls')">
+         {% csrf_token %}
+         <input type="hidden" name="command_name" value="execute">
+         <button type="submit" id="elserButton" class="btn btn-primary">Deploy Elser, Pipeline Config, and Setup KB</button>
+     </form>
+     <p id="loadingTextEls" class="loading-text" style="display: none; font-weight: bold; color: #007bff;">Processing Elser... Please wait.</p>
+
+     <p>
+        In order for sentiment analysis to work on the LLM logging capability, you will need a sentiment model.<br>
+        Click below to deploy the 'nlptown__bert-base-multilingual-uncased-sentiment' model. This model provides a score based on stars (5 being the most positive and 1 being the least) and also gives a confidence prediction out of 1.
+     </p>
+
+     <!-- Form for Deploying Bert Sentiment Model -->
+     <form method="post" action="{% url 'eland_action' %}" onsubmit="startLoading('importBertButton', 'loadingTextBert')">
+         {% csrf_token %}
+         <input type="hidden" name="command_name" value="eland_execute">
+         <button type="submit" id="importBertButton" class="btn btn-secondary">Deploy Bert nlptown</button>
+     </form>
+     <p id="loadingTextBert" class="loading-text" style="display: none; font-weight: bold; color: #007bff;">Processing Bert... Please wait.</p>
+
+    <!-- JavaScript for handling loading messages and button disable -->
+    <script>
+    function startLoading(buttonId, loadingTextId) {
+        // Show the loading text
+        document.getElementById(loadingTextId).style.display = "block";
+        
+        // Disable the clicked button to prevent multiple submissions
+        document.getElementById(buttonId).disabled = true;
+    }
+    </script>
+
+    <!-- Display message from Django backend -->
+    {% if message %}
+    <div class="alert alert-info">
+        {{ message|safe }}
+    </div>
+    {% endif %}
  </div>
 {% endblock %}

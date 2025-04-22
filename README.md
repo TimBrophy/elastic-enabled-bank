@@ -44,13 +44,13 @@ Docker version will come in two flavors :
 _elasticbank_
 
 ````bash
-sudo docker run --env-file .env -d --rm --name elastic-bank -p 8000:8000 ghcr.io/TimBrophy/elasticbank
+sudo docker run --env-file .env -d --rm --name elastic-bank -p 8000:8000 ghcr.io/timbrophy/elasticbank
 ````
 
 _elasticbank-complete_
 
 ````bash
-sudo docker run --env-file .env -d --rm --name elastic-bank-complete -p 8000:8000 ghcr.io/TimBrophy/elasticbank-complete
+sudo docker run --env-file .env -d --rm --name elastic-bank-complete -p 8000:8000 ghcr.io/timbrophy/elasticbank-complete
 ````
 
 - Option 2 : Build the container image:

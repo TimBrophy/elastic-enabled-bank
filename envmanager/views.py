@@ -422,7 +422,7 @@ def deploy_elser(model_id, request):
                 # Create new model if not found
                 es.ml.put_trained_model(
                     model_id=model_id,
-                    input={"field_names": ["concatenated_text"]}
+                    input={"field_names": ["text_field"]}
                 )
                 deployment_status += f"{model_id} model creation initiated. Downloading...<br>"
             except ApiError as e:

@@ -43,6 +43,10 @@ CUSTOMER_SUPPORT_INDEX = env('KNOWLEDGE_BASE',default='search-customer-support')
 LLM_AUDIT_LOG_INDEX = env('LLM_AUDIT_LOG_INDEX',default='llm-audit-log')
 LLM_AUDIT_LOG_INDEX_PIPELINE_NAME = env('LLM_AUDIT_LOG_INDEX_PIPELINE_NAME',default='ml-inference-sentiment')
 LLM_PROVIDER = env('LLM_PROVIDER',default='azure')
+ELASTIC_APM_SERVER_URL = env('ELASTIC_APM_SERVER_URL',default=None)
+ELASTIC_APM_ENVIRONMENT = env('ELASTIC_APM_ENVIRONMENT',default="dev")
+ELASTIC_APM_SERVICE_VERSION = env('ELASTIC_APM_SERVICE_VERSION',default="1.0.0")
+
 openai_api_key = env('openai_api_key',default='')
 openai_api_type = env('openai_api_type',default=None)
 openai_api_base = env('openai_api_base',default=None)
@@ -62,6 +66,7 @@ knowledge_base = env('KNOWLEDGE_BASE',default=None)
 
 # Application definition
 INSTALLED_APPS = [
+    'elasticapm.contrib.django',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -98,6 +103,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'config.context_processors.env_variables',
+                'elasticapm.contrib.django.context_processors.rum_tracing',
             ],
         },
     },
@@ -149,7 +156,9 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+
 
 # Base url to serve media files
 MEDIA_URL = 'media/'
@@ -161,24 +170,41 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
 LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
+    'version': 1,
+    'disable_existing_loggers': True,
+    'formatters': {
+        'verbose': {
+            'format': '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s'
+        },
+    },
     'handlers': {
         'elasticapm': {
-            'level': 'INFO',
+            'level': 'DEBUG',
             'class': 'elasticapm.contrib.django.handlers.LoggingHandler',
         },
         'console': {
-            'level': 'WARNING',
-            'class': 'logging.StreamHandler'
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
         }
     },
     'loggers': {
-        'elasticapm': {
-            'level': 'WARNING',
-            'handlers': ['console']
+        'django.db.backends': {
+            'level': 'INFO',
+            'handlers': ['console'],
+            'propagate': False,
+        },
+        'elastic-bank': {
+            'level': 'DEBUG',
+            'handlers': ['elasticapm', 'console'],
+            'propagate': False,
+        },
+        # Log errors from the Elastic APM module to the console (recommended)
+        'elasticapm.errors': {
+            'level': 'INFO',
+            'handlers': ['console'],
+            'propagate': False,
         },
     },
 }

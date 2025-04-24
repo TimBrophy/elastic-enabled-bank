@@ -25,8 +25,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
+import logging
 
 load_dotenv()
+
 
 from langchain.schema import (
     SystemMessage,
@@ -47,6 +49,7 @@ logging_index = getattr(settings, 'LLM_AUDIT_LOG_INDEX', None)
 logging_pipeline = getattr(settings, 'LLM_AUDIT_LOG_INDEX_PIPELINE_NAME', None)
 llm_provider = getattr(settings, 'LLM_PROVIDER', None)
 llm_temperature = 0
+logger = logging.getLogger('elastic-bank')
 
 # calculate the cost of an LLM interaction
 def calculate_cost(message, type):
@@ -189,7 +192,7 @@ def build_record(transaction_id):
             "lon": longitude
         }
     payload = json.dumps(payload)
-    print(payload)
+    logger.info(f"Record payload: {payload}")
     return payload
 
 
@@ -562,7 +565,7 @@ def search(request):
         search_term = request.POST.get('search_term')
         if search_term is None:
             search_term = request.POST.get('question')
-        print(search_term)
+        logger.info(f"Record search term: {search_term}")
         demo_user = Customer.objects.filter(id=customer_id).first()
         # handle the es connection for the map and conversational search components
         es = get_es_client()
@@ -595,7 +598,7 @@ def search(request):
         field_list = ["transaction_date", "description", "transaction_value",
                       "transaction_category", "bank_account_number", "opening_balance", "closing_balance", "_score"]
         results = es.search(index=index_name, query=query, size=20, min_score=1)
-        print(results)
+        logger.info(f"Record search results: {results}")
         response_data = [{"_score": hit["_score"], **hit["_source"]} for hit in results["hits"]["hits"]]
         transaction_results = []
         # Check if there are hits

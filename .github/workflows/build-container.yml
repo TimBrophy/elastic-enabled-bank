@@ -1,4 +1,4 @@
-name: Building and Push Elastic-enabled-bank Container
+name: Build & push elasticbank container to registry
 
 on:
   push:
